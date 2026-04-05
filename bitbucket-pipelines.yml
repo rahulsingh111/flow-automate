@@ -1,0 +1,26 @@
+image: node:20
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Secure Deploy to EC2
+          deployment: production
+          script:
+            - apt-get update && apt-get install -y awscli
+            - EC2_HOST=$(aws ec2 describe-instances --instance-ids $EC2_INSTANCE_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text --region $AWS_REGION)
+            - mkdir -p ~/.ssh
+            - echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/key.pem
+            - chmod 600 ~/.ssh/key.pem
+            - |
+              ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+
+                cd /home/ubuntu/app || exit 1
+               
+                git pull origin main
+                npm install --production
+                
+                pm2 reload my-app || pm2 restart server.js --name "my-app"
+                
+                echo "Deployment successfully completed."
+              EOF
